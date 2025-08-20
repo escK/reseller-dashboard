@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reseller Analytics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Simple loader style */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 4px solid #eb1564; /* Bake pink for loader */
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .card {
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease-in-out;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+        }
+    </style>
+    <script>
+        // Customizing Tailwind to include Bake's brand color for specific highlights
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'bake-pink': '#eb1564',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="mb-8 pb-4 border-b border-gray-200">
+            <h1 class="text-3xl font-bold text-bake-pink">Reseller Dashboard</h1>
+            <p class="text-gray-600 mt-1">Live analytics from Box</p>
+        </header>
+
+        <div id="loader" class="flex flex-col items-center justify-center h-64">
+            <div class="loader mb-4"></div>
+            <p class="text-gray-600">Fetching data from Google Sheets...</p>
+        </div>
+
+        <main id="dashboard-content" class="hidden">
+            <!-- Key Metrics Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="card p-6">
+                    <h2 class="text-sm font-medium text-gray-500">Total Files</h2>
+                    <p id="total-files" class="text-3xl font-bold text-bake-pink">0</p>
+                </div>
+                <div class="card p-6">
+                    <h2 class="text-sm font-medium text-gray-500">Total Resellers</h2>
+                    <p id="total-resellers" class="text-3xl font-bold text-gray-700">0</p>
+                </div>
+                 <div class="card p-6">
+                    <h2 class="text-sm font-medium text-gray-500">Most Active Reseller</h2>
+                    <p id="most-active-reseller" class="text-3xl font-bold text-bake-pink">-</p>
+                </div>
+                 <div class="card p-6">
+                    <h2 class="text-sm font-medium text-gray-500">Most Common Filetype</h2>
+                    <p id="most-common-filetype" class="text-3xl font-bold text-gray-700">-</p>
+                </div>
+            </div>
+
+            <!-- Charts Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="card p-6">
+                    <h3 class="text-lg font-semibold mb-4">Total Files per Reseller</h3>
+                    <canvas id="files-per-reseller-chart"></canvas>
+                </div>
+
+                <div class="card p-6">
+                    <h3 class="text-lg font-semibold mb-1">Filetype Distribution</h3>
+                    <div class="flex items-center mb-4">
+                        <label for="reseller-select" class="mr-2 text-sm">Reseller:</label>
+                        <select id="reseller-select" class="p-2 border rounded-md bg-gray-50"></select>
+                    </div>
+                    <canvas id="filetype-chart"></canvas>
+                </div>
+
+                <div class="card p-6 lg:col-span-2">
+                    <h3 class="text-lg font-semibold mb-4">Monthly File Uploads</h3>
+                    <canvas id="monthly-files-chart"></canvas>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- CONFIGURATION ---
+            // The ID of your public Google Spreadsheet
+            const SPREADSHEET_ID = '1KbREud-WAYBTPkNrPostSfnNxZyNnxq4JVBHyzLjIbU';
+            // **CORRECTED**: The exact names of the sheets (tabs) for each reseller
+            const RESELLER_SHEET_NAMES = ['Liverpool', 'Palacio de Hierro', 'Coppel', 'Office Depot', 'Costco', 'Walmart', 'Sams', 'Elektra', 'Sanborns', 'Sears', 'AT&T', 'APR', 'Claro Shop', 'RadioShack', 'Rappi', 'Amazon'];
+
+            // --- UI ELEMENTS ---
+            const loader = document.getElementById('loader');
+            const dashboardContent = document.getElementById('dashboard-content');
+            const resellerSelect = document.getElementById('reseller-select');
+
+            // --- CHART INSTANCES ---
+            // To keep track of charts so they can be destroyed before redrawing
+            let filesPerResellerChart, filetypeChart, monthlyFilesChart;
+            
+            // --- API CALLS ---
+            // Fetches and parses CSV data from a public Google Sheet
+            async function getSheetData(sheetName) {
+                const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        throw new Error(`Network response was not ok for sheet: ${sheetName}`);
+                    }
+                    const csvText = await response.text();
+                    
+                    // Parse the CSV text into an array of arrays.
+                    const rows = csvText.trim().split('\n');
+                    const data = rows.map(row => {
+                        // This simple parser handles the quoted fields from Google Sheets CSV export
+                        return row.slice(1, -1).split('","');
+                    });
+                    
+                    // Return data without the header row
+                    return data.slice(1);
+                } catch (error) {
+                    console.error(`Failed to fetch or parse sheet data for ${sheetName}:`, error);
+                    loader.innerHTML = `<p class="text-red-500 font-semibold">Could not load data for "${sheetName}". Please ensure the sheet name is correct and the document is public.</p>`;
+                    return []; 
+                }
+            }
+
+
+            // --- DATA PROCESSING ---
+            // Transforms the raw sheet data into a structured format for the dashboard
+            function processData(rawData) {
+                const totalFiles = rawData.reduce((sum, sheet) => sum + sheet.data.length, 0);
+                const totalResellers = rawData.length;
+
+                // Calculate total files per reseller and sort to find the most active
+                const filesPerReseller = rawData.map(sheet => ({
+                    reseller: sheet.name,
+                    count: sheet.data.length
+                })).sort((a, b) => b.count - a.count);
+                
+                const mostActive = filesPerReseller.length > 0 ? filesPerReseller[0] : { reseller: '-', count: 0 };
+
+                // Calculate filetype counts for each reseller and overall
+                const filetypeCounts = {};
+                const allFiletypes = {};
+                rawData.forEach(sheet => {
+                    const counts = {};
+                    sheet.data.forEach(row => {
+                        // **CORRECTED**: Column for filetype (Extension) is index 2
+                        if (row && row.length > 2) {
+                            const filetype = row[2]; 
+                            if (filetype) {
+                                counts[filetype] = (counts[filetype] || 0) + 1;
+                                allFiletypes[filetype] = (allFiletypes[filetype] || 0) + 1;
+                            }
+                        }
+                    });
+                    filetypeCounts[sheet.name] = counts;
+                });
+                
+                const mostCommonFiletype = Object.keys(allFiletypes).reduce((a, b) => allFiletypes[a] > allFiletypes[b] ? a : b, '-');
+
+
+                // Aggregate file uploads by month across all resellers
+                const monthlyCounts = {};
+                rawData.forEach(sheet => {
+                    sheet.data.forEach(row => {
+                         // **CORRECTED**: Column for date (Last Modified) is index 1
+                        if (row && row.length > 1) {
+                            const dateStr = row[1]; 
+                            if (dateStr) {
+                                try {
+                                    const date = new Date(dateStr);
+                                    if (!isNaN(date)) { // Check if the date is valid
+                                        const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                                        if (!monthlyCounts[month]) {
+                                            monthlyCounts[month] = {};
+                                        }
+                                        monthlyCounts[month][sheet.name] = (monthlyCounts[month][sheet.name] || 0) + 1;
+                                    }
+                                } catch (e) {
+                                    console.warn(`Invalid date format encountered: ${dateStr}`);
+                                }
+                            }
+                        }
+                    });
+                });
+                
+                return {
+                    totalFiles,
+                    totalResellers,
+                    mostActiveReseller: mostActive.reseller,
+                    mostCommonFiletype,
+                    filesPerReseller,
+                    filetypeCounts,
+                    monthlyCounts
+                };
+            }
+
+            // --- CHART RENDERING ---
+            // Creates and updates the charts using Chart.js
+            function renderCharts(processedData) {
+                const chartColors = [
+                    '#3b82f6', '#10b981', '#ef4444', '#f97316', '#8b5cf6', '#14b8a6', '#6366f1', '#a855f7'
+                ];
+                
+                // Chart 1: Files per Reseller (Bar Chart)
+                const filesCtx = document.getElementById('files-per-reseller-chart').getContext('2d');
+                if (filesPerResellerChart) filesPerResellerChart.destroy();
+                filesPerResellerChart = new Chart(filesCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: processedData.filesPerReseller.map(d => d.reseller),
+                        datasets: [{
+                            label: 'Number of Files',
+                            data: processedData.filesPerReseller.map(d => d.count),
+                            backgroundColor: chartColors,
+                            borderColor: chartColors,
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, grid: { color: '#e5e7eb' } }, x: { grid: { display: false } } }
+                    }
+                });
+
+                // Chart 2: Filetype Distribution (Doughnut Chart)
+                const filetypeCtx = document.getElementById('filetype-chart').getContext('2d');
+                function updateFiletypeChart(resellerName) {
+                    const data = processedData.filetypeCounts[resellerName] || {};
+                    if (filetypeChart) filetypeChart.destroy();
+                    filetypeChart = new Chart(filetypeCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: Object.keys(data),
+                            datasets: [{
+                                data: Object.values(data),
+                                backgroundColor: chartColors,
+                                hoverOffset: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: { position: 'right' }
+                            }
+                        }
+                    });
+                }
+                
+                resellerSelect.innerHTML = '';
+                processedData.filesPerReseller.forEach(reseller => {
+                    const option = document.createElement('option');
+                    option.value = reseller.reseller;
+                    option.textContent = reseller.reseller;
+                    resellerSelect.appendChild(option);
+                });
+                resellerSelect.addEventListener('change', (e) => updateFiletypeChart(e.target.value));
+                
+                if (processedData.filesPerReseller.length > 0) {
+                    updateFiletypeChart(processedData.filesPerReseller[0].reseller);
+                }
+
+                // Chart 3: Monthly Files (Line Chart)
+                const monthlyCtx = document.getElementById('monthly-files-chart').getContext('2d');
+                const months = Object.keys(processedData.monthlyCounts).sort();
+                const datasets = RESELLER_SHEET_NAMES.map((reseller, index) => ({
+                    label: reseller,
+                    data: months.map(month => processedData.monthlyCounts[month][reseller] || 0),
+                    borderColor: chartColors[index % chartColors.length],
+                    backgroundColor: chartColors[index % chartColors.length] + '33',
+                    fill: true,
+                    tension: 0.3
+                }));
+
+                if (monthlyFilesChart) monthlyFilesChart.destroy();
+                monthlyFilesChart = new Chart(monthlyCtx, {
+                    type: 'line',
+                    data: { labels: months, datasets: datasets },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { position: 'top' } },
+                        scales: { 
+                            y: { beginAtZero: true, grid: { color: '#e5e7eb' } },
+                            x: { grid: { display: false } }
+                        }
+                    }
+                });
+            }
+
+            // --- MAIN EXECUTION ---
+            async function initializeDashboard() {
+                try {
+                    const allSheetData = await Promise.all(
+                        RESELLER_SHEET_NAMES.map(async name => ({
+                            name,
+                            data: await getSheetData(name)
+                        }))
+                    );
+
+                    const processedData = processData(allSheetData);
+
+                    document.getElementById('total-files').textContent = processedData.totalFiles;
+                    document.getElementById('total-resellers').textContent = processedData.totalResellers;
+                    document.getElementById('most-active-reseller').textContent = processedData.mostActiveReseller;
+                    document.getElementById('most-common-filetype').textContent = processedData.mostCommonFiletype;
+
+                    renderCharts(processedData);
+
+                    loader.style.display = 'none';
+                    dashboardContent.classList.remove('hidden');
+
+                } catch (error) {
+                    console.error('Failed to initialize dashboard:', error);
+                    loader.innerHTML = `<p class="text-red-500 font-semibold">An error occurred: ${error.message}</p><p class="text-gray-600">Please ensure the spreadsheet is public ("Anyone on the internet with this link can view") and the sheet names are correct in the script.</p>`;
+                }
+            }
+
+            initializeDashboard();
+        });
+    </script>
+</body>
+</html>
