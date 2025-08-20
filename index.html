@@ -9,6 +9,29 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="apple-touch-icon" sizes="57x57" href="images/apple-icon-57x57.png">
+    <link rel="apple-touch-icon" sizes="60x60" href="images/apple-icon-60x60.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="images/apple-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="76x76" href="images/apple-icon-76x76.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="images/apple-icon-114x114.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="images/apple-icon-120x120.png">
+    <link rel="apple-touch-icon" sizes="144x144" href="images/apple-icon-144x144.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="images/apple-icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="images/apple-icon-180x180.png">
+    <link rel="icon" type="image/png" sizes="192x192"  href="/android-icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="images/favicon-96x96.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png">
+    <link rel="manifest" href="images/manifest.json">
+    <meta name="msapplication-TileColor" content="#ffffff">
+    <meta name="msapplication-TileImage" content="images/ms-icon-144x144.png">
+    <meta name="theme-color" content="#ffffff">
+    
+      <meta property="og:title" content="Apple Resellers" />
+  <meta property="og:description" content="Detailed report by reseller, time and type of materials." />
+  <meta property="og:image" content="https://bake.mx/apple/images/apple-icon-180x180.png" />
+    
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -52,9 +75,15 @@
 <body class="bg-gray-50 text-gray-800">
 
     <div class="container mx-auto p-4 md:p-8">
-        <header class="mb-8 pb-4 border-b border-gray-200">
-            <h1 class="text-3xl font-bold text-bake-pink">Reseller Dashboard</h1>
-            <p class="text-gray-600 mt-1">Live analytics from Box</p>
+         <header class="flex flex-col md:flex-row md:justify-between items-center gap-4 mb-8 pb-4 border-b border-gray-200">
+            <div>
+                <img src="logo_bake.png" alt="Bake Logo" class="w-24 h-auto">
+            </div>
+            <div class="text-center md:text-left">
+                <h1 class="text-3xl font-bold text-bake-pink">Reseller Dashboard</h1>
+                <p class="text-gray-600 mt-1">Live analytics from Box</p>
+            </div>
+
         </header>
 
         <div id="loader" class="flex flex-col items-center justify-center h-64">
@@ -110,10 +139,24 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // --- CONFIGURATION ---
-            // The ID of your public Google Spreadsheet
             const SPREADSHEET_ID = '1KbREud-WAYBTPkNrPostSfnNxZyNnxq4JVBHyzLjIbU';
-            // **CORRECTED**: The exact names of the sheets (tabs) for each reseller
-            const RESELLER_SHEET_NAMES = ['Liverpool', 'Palacio de Hierro', 'Coppel', 'Office Depot', 'Costco', 'Walmart', 'Sams', 'Elektra', 'Sanborns', 'Sears', 'AT&T', 'APR', 'Claro Shop', 'RadioShack', 'Rappi', 'Amazon'];
+            const RESELLER_SHEET_NAMES = ['Liverpool', 'Palacio de Hierro', 'Coppel', 'Costco', 'Walmart', 'Sams', 'Elektra', 'Sanborns', 'Sears', 'AT&T', 'APR'];
+
+            // **NEW**: Assign a specific color to each reseller for brand consistency
+            const RESELLER_COLORS = {
+                'Liverpool': '#c32e95',
+                'Palacio de Hierro': '#edc74b',
+                'Coppel': '#3d41e0',
+                'Costco': '#ff0000',
+                'Walmart': '#5c8a47',
+                'Sams': '#3a5fa7',
+                'Elektra': '#ffa800',
+                'Sanborns': '#a83f37',
+                'Sears': '#00539F',
+                'AT&T': '#69a8e2',
+                'APR': '#a9a9a9',
+                'default': '#6b7280' // A fallback color
+            };
 
             // --- UI ELEMENTS ---
             const loader = document.getElementById('loader');
@@ -121,28 +164,17 @@
             const resellerSelect = document.getElementById('reseller-select');
 
             // --- CHART INSTANCES ---
-            // To keep track of charts so they can be destroyed before redrawing
             let filesPerResellerChart, filetypeChart, monthlyFilesChart;
             
             // --- API CALLS ---
-            // Fetches and parses CSV data from a public Google Sheet
             async function getSheetData(sheetName) {
                 const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
                 try {
                     const response = await fetch(url);
-                    if (!response.ok) {
-                        throw new Error(`Network response was not ok for sheet: ${sheetName}`);
-                    }
+                    if (!response.ok) throw new Error(`Network response was not ok for sheet: ${sheetName}`);
                     const csvText = await response.text();
-                    
-                    // Parse the CSV text into an array of arrays.
                     const rows = csvText.trim().split('\n');
-                    const data = rows.map(row => {
-                        // This simple parser handles the quoted fields from Google Sheets CSV export
-                        return row.slice(1, -1).split('","');
-                    });
-                    
-                    // Return data without the header row
+                    const data = rows.map(row => row.slice(1, -1).split('","'));
                     return data.slice(1);
                 } catch (error) {
                     console.error(`Failed to fetch or parse sheet data for ${sheetName}:`, error);
@@ -151,28 +183,20 @@
                 }
             }
 
-
             // --- DATA PROCESSING ---
-            // Transforms the raw sheet data into a structured format for the dashboard
             function processData(rawData) {
                 const totalFiles = rawData.reduce((sum, sheet) => sum + sheet.data.length, 0);
                 const totalResellers = rawData.length;
-
-                // Calculate total files per reseller and sort to find the most active
                 const filesPerReseller = rawData.map(sheet => ({
                     reseller: sheet.name,
                     count: sheet.data.length
                 })).sort((a, b) => b.count - a.count);
-                
                 const mostActive = filesPerReseller.length > 0 ? filesPerReseller[0] : { reseller: '-', count: 0 };
-
-                // Calculate filetype counts for each reseller and overall
                 const filetypeCounts = {};
                 const allFiletypes = {};
                 rawData.forEach(sheet => {
                     const counts = {};
                     sheet.data.forEach(row => {
-                        // **CORRECTED**: Column for filetype (Extension) is index 2
                         if (row && row.length > 2) {
                             const filetype = row[2]; 
                             if (filetype) {
@@ -183,25 +207,18 @@
                     });
                     filetypeCounts[sheet.name] = counts;
                 });
-                
                 const mostCommonFiletype = Object.keys(allFiletypes).reduce((a, b) => allFiletypes[a] > allFiletypes[b] ? a : b, '-');
-
-
-                // Aggregate file uploads by month across all resellers
                 const monthlyCounts = {};
                 rawData.forEach(sheet => {
                     sheet.data.forEach(row => {
-                         // **CORRECTED**: Column for date (Last Modified) is index 1
                         if (row && row.length > 1) {
                             const dateStr = row[1]; 
                             if (dateStr) {
                                 try {
                                     const date = new Date(dateStr);
-                                    if (!isNaN(date)) { // Check if the date is valid
+                                    if (!isNaN(date)) {
                                         const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                                        if (!monthlyCounts[month]) {
-                                            monthlyCounts[month] = {};
-                                        }
+                                        if (!monthlyCounts[month]) monthlyCounts[month] = {};
                                         monthlyCounts[month][sheet.name] = (monthlyCounts[month][sheet.name] || 0) + 1;
                                     }
                                 } catch (e) {
@@ -211,24 +228,12 @@
                         }
                     });
                 });
-                
-                return {
-                    totalFiles,
-                    totalResellers,
-                    mostActiveReseller: mostActive.reseller,
-                    mostCommonFiletype,
-                    filesPerReseller,
-                    filetypeCounts,
-                    monthlyCounts
-                };
+                return { totalFiles, totalResellers, mostActiveReseller: mostActive.reseller, mostCommonFiletype, filesPerReseller, filetypeCounts, monthlyCounts };
             }
 
             // --- CHART RENDERING ---
-            // Creates and updates the charts using Chart.js
             function renderCharts(processedData) {
-                const chartColors = [
-                    '#3b82f6', '#10b981', '#ef4444', '#f97316', '#8b5cf6', '#14b8a6', '#6366f1', '#a855f7'
-                ];
+                const genericChartColors = ['#3b82f6', '#10b981', '#ef4444', '#f97316', '#8b5cf6', '#14b8a6', '#6366f1', '#a855f7'];
                 
                 // Chart 1: Files per Reseller (Bar Chart)
                 const filesCtx = document.getElementById('files-per-reseller-chart').getContext('2d');
@@ -240,8 +245,9 @@
                         datasets: [{
                             label: 'Number of Files',
                             data: processedData.filesPerReseller.map(d => d.count),
-                            backgroundColor: chartColors,
-                            borderColor: chartColors,
+                            // **MODIFIED**: Use the specific color for each reseller
+                            backgroundColor: processedData.filesPerReseller.map(d => RESELLER_COLORS[d.reseller] || RESELLER_COLORS.default),
+                            borderColor: processedData.filesPerReseller.map(d => RESELLER_COLORS[d.reseller] || RESELLER_COLORS.default),
                             borderWidth: 1
                         }]
                     },
@@ -263,15 +269,13 @@
                             labels: Object.keys(data),
                             datasets: [{
                                 data: Object.values(data),
-                                backgroundColor: chartColors,
+                                backgroundColor: genericChartColors,
                                 hoverOffset: 4
                             }]
                         },
                         options: {
                             responsive: true,
-                            plugins: {
-                                legend: { position: 'right' }
-                            }
+                            plugins: { legend: { position: 'right' } }
                         }
                     });
                 }
@@ -284,7 +288,6 @@
                     resellerSelect.appendChild(option);
                 });
                 resellerSelect.addEventListener('change', (e) => updateFiletypeChart(e.target.value));
-                
                 if (processedData.filesPerReseller.length > 0) {
                     updateFiletypeChart(processedData.filesPerReseller[0].reseller);
                 }
@@ -292,14 +295,18 @@
                 // Chart 3: Monthly Files (Line Chart)
                 const monthlyCtx = document.getElementById('monthly-files-chart').getContext('2d');
                 const months = Object.keys(processedData.monthlyCounts).sort();
-                const datasets = RESELLER_SHEET_NAMES.map((reseller, index) => ({
-                    label: reseller,
-                    data: months.map(month => processedData.monthlyCounts[month][reseller] || 0),
-                    borderColor: chartColors[index % chartColors.length],
-                    backgroundColor: chartColors[index % chartColors.length] + '33',
-                    fill: true,
-                    tension: 0.3
-                }));
+                // **MODIFIED**: Use specific colors for each reseller's line
+                const datasets = RESELLER_SHEET_NAMES.map(reseller => {
+                    const color = RESELLER_COLORS[reseller] || RESELLER_COLORS.default;
+                    return {
+                        label: reseller,
+                        data: months.map(month => (processedData.monthlyCounts[month] && processedData.monthlyCounts[month][reseller]) || 0),
+                        borderColor: color,
+                        backgroundColor: color + '33', // Add transparency for the fill
+                        fill: true,
+                        tension: 0.3
+                    };
+                });
 
                 if (monthlyFilesChart) monthlyFilesChart.destroy();
                 monthlyFilesChart = new Chart(monthlyCtx, {
@@ -320,27 +327,19 @@
             async function initializeDashboard() {
                 try {
                     const allSheetData = await Promise.all(
-                        RESELLER_SHEET_NAMES.map(async name => ({
-                            name,
-                            data: await getSheetData(name)
-                        }))
+                        RESELLER_SHEET_NAMES.map(async name => ({ name, data: await getSheetData(name) }))
                     );
-
                     const processedData = processData(allSheetData);
-
                     document.getElementById('total-files').textContent = processedData.totalFiles;
                     document.getElementById('total-resellers').textContent = processedData.totalResellers;
                     document.getElementById('most-active-reseller').textContent = processedData.mostActiveReseller;
                     document.getElementById('most-common-filetype').textContent = processedData.mostCommonFiletype;
-
                     renderCharts(processedData);
-
                     loader.style.display = 'none';
                     dashboardContent.classList.remove('hidden');
-
                 } catch (error) {
                     console.error('Failed to initialize dashboard:', error);
-                    loader.innerHTML = `<p class="text-red-500 font-semibold">An error occurred: ${error.message}</p><p class="text-gray-600">Please ensure the spreadsheet is public ("Anyone on the internet with this link can view") and the sheet names are correct in the script.</p>`;
+                    loader.innerHTML = `<p class="text-red-500 font-semibold">An error occurred: ${error.message}</p><p class="text-gray-600">Please ensure the spreadsheet is public and the sheet names are correct.</p>`;
                 }
             }
 
